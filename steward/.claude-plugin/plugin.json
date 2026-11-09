@@ -1,0 +1,123 @@
+{
+  "name": "steward",
+  "version": "0.1.0",
+  "description": "One cockpit for Claude Code sessions: context health, cache, usage, handoff, collision and destructive-command guards in a side pane",
+  "types": "./types/index.d.ts",
+  "license": "MIT",
+  "author": {
+    "name": "Jay Jayakeerthy"
+  },
+  "userConfig": {
+    "context": {
+      "type": "string",
+      "title": "Context health",
+      "description": "on: context zones, handoff actions and auto-handoff. off: hidden and inactive.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    },
+    "cache": {
+      "type": "string",
+      "title": "Cache keeper",
+      "description": "on: estimated prompt-cache countdown and cold-cache warning. off: hidden and inactive.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    },
+    "usage": {
+      "type": "string",
+      "title": "Usage",
+      "description": "on: 5-hour and weekly limits and session cost. off: hidden.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    },
+    "collision": {
+      "type": "string",
+      "title": "Collision guard",
+      "description": "on: ask before editing a file another session touched recently. off: inactive.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    },
+    "blast": {
+      "type": "string",
+      "title": "Blast radius",
+      "description": "on: ask before destructive shell and git commands. off: inactive.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    },
+    "pane": {
+      "type": "string",
+      "title": "Open pane at start",
+      "description": "on: the Steward pane opens when a session starts (wide terminals place it at once; narrow ones wait until you run /steward). off: open it with /steward.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    },
+    "quiet": {
+      "type": "string",
+      "title": "Quiet band",
+      "description": "on: while the pane is closed, the line above the prompt shows only when something needs attention. off: it always shows a one-line summary.",
+      "default": "off",
+      "options": [
+        "on",
+        "off"
+      ]
+    },
+    "amber": {
+      "type": "string",
+      "title": "Amber at (tokens)",
+      "description": "Context tokens where the amber zone starts. Capped at half the model's window. Default 250000.",
+      "default": "250000"
+    },
+    "red": {
+      "type": "string",
+      "title": "Red at (tokens)",
+      "description": "Context tokens where the red zone starts. Capped at 80% of the auto-compact point (or of the window when auto-compact is off), so red always comes before auto-compact. Default 400000.",
+      "default": "400000"
+    },
+    "briefModel": {
+      "type": "string",
+      "title": "Handoff brief model",
+      "description": "session: the session's own model reads the conversation through the prompt cache (cheapest). sonnet or haiku: a trimmed transcript is sent to that model.",
+      "default": "session",
+      "options": [
+        "session",
+        "sonnet",
+        "haiku"
+      ]
+    },
+    "cacheLead": {
+      "type": "string",
+      "title": "Cache warning lead (minutes)",
+      "description": "How long before the estimated cache expiry Steward sends a notification. 0 turns the warning off. Capped at half the cache window. Default 5.",
+      "default": "5"
+    },
+    "prices": {
+      "type": "string",
+      "title": "Input prices ($ per million tokens)",
+      "description": "Overrides for the cold-cache cost estimate, e.g. \"opus=4, sonnet-5-5=2\". Matched against the model name; built-in list prices (2026-10) are used otherwise. Leave empty for the defaults.",
+      "default": ""
+    },
+    "blastPatterns": {
+      "type": "string",
+      "title": "Extra destructive patterns",
+      "description": "More commands Blast Radius asks about, separated by ';'. Words must match from the start; * is any one word. Example: kubectl delete; terraform destroy; docker system prune",
+      "default": ""
+    }
+  }
+}

@@ -1,0 +1,134 @@
+# Activities: Steward
+
+Task breakdown for [PLAN.md](PLAN.md). Requirement IDs refer to [PRD.md](PRD.md). Mockups are in [DESIGN.md](DESIGN.md).
+Status: ☐ todo · ◐ in progress · ☑ done · ✕ dropped. Estimates are in hours.
+
+---
+
+## Phase 0: Spikes & setup
+
+| ID | Activity | Reqs | Est | Depends | Done when | Status |
+|---|---|---|---|---|---|---|
+| A-0.1 | Create `mymod/steward/` source layout and tsconfig from the engine types. Add a `check` script running validate, tsc and test | NFR | 1 | – | One command checks the mod | ☑ 2026-11-09: `scripts/check.sh` written by a second session from the handoff brief. Reviewed and kept. Run many times in Phases 1–3 (pass a dev dir: `scripts/check.sh <dev-mods dir>`) |
+| A-0.2 | **Spike: clear + re-seed.** Persist text to `$.store`, run `$.command.run('clear')`, find the post-clear hook point (`session.end` reason `clear` / `turn.start` / `session.measure`), and `$.prompt.fill` the text | H-3, R1 | 3 | A-0.1 | Reliable, or fallback documented | ☑ 2026-11-09: **PASS on attempt 1.** `$.model.fork` brief → `$.store` and `.claude/handoffs/*.md` → `/clear` → `session.end{reason:'clear'}` → timer → `$.prompt.fill`. R1 resolved |
+| A-0.3 | **Spike: band keys.** AbovePrompt band with Buttons (`ui.press`). Capture single keys only when `$.prompt.read()` is empty. Test a leader chord (`ctrl+g` then letter) | U-5, R6 | 3 | A-0.1 | Key strategy confirmed, with no accidental triggers while typing | ☑ 2026-11-09: checked live by the owner (`spikes/steward-spike`) |
+
+> **A-0.3 findings (from the engine types, 2.1.319):** The engine has this built in, so no custom key capture is needed. A Button `hotkey` digit (`"1"`…`"9"`) presses a band button **only from an empty prompt**. Letter hotkeys work only after the band has focus (`ctrl+x tab` or a click). A Button `action` prop can also bind a keybindings.json chord. → **Change to the design:** the band's actions use digits 1–3 instead of the letters H/F/K, and no leader chord is needed. Q3 closes once the live check passes. Side finding for Phase 3: `$.model.fork` asks a question over the session's own transcript using the prompt cache, so it's a cheaper way to write the handoff brief than `$.model.complete`.
+| A-0.4 | **Spike: dialog inside `tool.call`.** 4-option `$.ui.ask` from an Edit hook. Check the deny reason reaches the model, and the `-p` fail-open path | G-3, B-4 | 1.5 | A-0.1 | Behaviour confirmed | ☑ 2026-11-09: **Proceed** ✓ edit ran · **Cancel** ✓ and **Move to worktree** ✓ deny text reached the model word for word · **headless** ✓ guard ran, `$.ui.ask` unavailable (no AskUserQuestion in `-p`), edit allowed through (seen in debug log) · **Other** ✓ the typed text reached the model as the deny reason ("use a green badge instead") |
+| A-0.6 | **Spike: pane-first cockpit.** Pane opens at session start, shows live Context and Usage, live guard stats from A-0.4, demo Cache/Sessions, and letter hotkeys while focused. `/steward` toggles it. The band hides while the pane is shown, except for alerts | P-1, P-2 | 3 | A-0.3 | Owner sees the pane live and approves the layout | ☑ 2026-11-09: approved, carried into `steward/` v0.1 |
+| A-0.7 | Finding from the A-0.4 headless run: skip `$.ui.open` when `$.session.surfaces()` is empty (it logs `ui.open: no-surface` in `-p`). Do this in Phase 1 (A-1.6) | NFR | 0.25 | – | No error in `-p` debug log | ☑ 2026-11-09: `openPane` returns early when there are no surfaces |
+| A-0.8 | Findings from the A-0.2 live run → Phase 3: (1) the brief only knows the session's own conversation, so it reported finished spikes as still to do. It must include **ground truth**: ACTIVITIES statuses, recently changed files, `git status`. (2) After the user sent it, the fresh session **acted at once** on "Next step" and wrote `scripts/check.sh`. The brief must end with "Confirm the current state and plan with the user before changing anything." (3) Q2 confirmed: fill the prompt, don't auto-submit | H-1 | – | A-0.2 | Folded into A-3.1 | ◐ with A-3.1: (1) and (2) built, (3) is A-3.3 |
+| A-0.5 | Record spike results in PRD §8 and §9. Resolve **Q3** | – | 0.5 | A-0.2..4 | PRD updated | ☑ 2026-11-09: PRD v0.3, §8 rows and R5–R7 updated. Q3 was already closed |
+
+## Phase 1: Shell (Surfaces A + B)
+
+| ID | Activity | Reqs | Est | Depends | Done when | Status |
+|---|---|---|---|---|---|---|
+| A-1.1 | Scaffold `steward` (plugin.json with userConfig toggles for each feature, hooks.json, register.tsx, types contract) | D-1 | 1 | A-0.5 | Loads with hot reload. Validate and tsc clean | ☑ 2026-11-09: `steward/` with 9 `userConfig` fields (5 feature toggles, pane, quiet, amber, red) |
+| A-1.2 | `state.ts`: atoms for context, cache, usage, sessions, guards, handoff, ui (pane open, collapsed sections) | D-3, U-7 | 1.5 | A-1.1 | Typed contract compiles | ☑ 2026-11-09: `hooks/state.ts` is the only file that touches state (engine scan rule) |
+| A-1.3 | **Band priority resolver** (pure): state → `{icon, tone, text, actions, trailing}` per DESIGN §2.2 | U-2, D-4 | 2 | A-1.2 | Unit tests cover all 8 states and combinations | ☑ 2026-11-09: `core/band.ts`, tests green |
+| A-1.4 | **Width logic** (pure): drop segments per DESIGN §2.3, falling back to the status line under 40 columns | U-3 | 1.5 | A-1.3 | Unit tests at 40, 60, 80, 120 and 200 columns | ☑ 2026-11-09: compact under 40 columns. The design said fall back to the status line under 40; the band's compact mode is used instead |
+| A-1.5 | `hud.tsx`: AbovePrompt render, icons and theme colours, buttons, quiet mode | U-1, U-4, U-6 | 2 | A-1.4 | Placeholder states render correctly | ☑ 2026-11-09: owner checked |
+| A-1.6 | `pane.tsx`: pane skeleton with 6 collapsible sections. Toggle with `S`, a click and `/steward`. Collapsed state kept in `$.store` | P-1, P-3 | 2.5 | A-1.2 | Opens and closes, and the layout survives a reload | ☑ 2026-11-09: owner checked toggle |
+| A-1.7 | `keys.ts`: empty-prompt keys and the leader chord (A-0.3 approach), routing to actions | U-5 | 1.5 | A-1.5 | No triggers while typing (test) | ☑ 2026-11-09: engine-native hotkeys (spike A-0.3). Band digits 1–3 plus 9 for the pane; pane letters h f a k |
+| A-1.8 | `/steward` command router with stub subcommands (DESIGN §5), plus `status` | U-5 | 1 | A-1.1 | Typeahead lists the subcommands | ☑ 2026-11-09: `/steward` toggle, open, close, help, status, demo, plus stubs for handoff, fresh, auto, ping, cancel |
+| A-1.9 | Module error isolation wrapper (log to debug, then `next(e)`) | D-6, R7 | 1 | A-1.1 | A thrown error in one module doesn't affect the others (test) | ☑ 2026-11-09: every non-render hook uses `.catch(($,e,next)=>next(e))`, and the engine logs failures |
+
+## Phase 2: Usage + Context
+
+| ID | Activity | Reqs | Est | Depends | Done when | Status |
+|---|---|---|---|---|---|---|
+| A-2.1 | `session.measure` hook → context, rateLimits and cost atoms | C-1, S-1, S-2 | 1 | A-1.2 | Band matches `/context` and the status line | ☑ pulled into Phase 1. Fix: seed from `$.session.usage()` at start and on `status`, because `session.measure` only fires on change. ☑ 2026-11-09: owner saw `ctx 28% (277K / 1M, amber) · 5h 4% · wk 1% · $8.85` |
+| A-2.2 | Token-based zone computation: amber `min(250K, 50% window)`, red `min(400K, 80% autoCompactThreshold)` read from `usage({breakdown:'summary'})`, both configurable. Toast on zone change only | C-2, C-7 | 1.5 | A-2.1 | Unit tests for 200K and 1M windows, auto-compact on and off | ☑ 2026-11-09: real point from `usage({breakdown:'summary'})` (owner saw `auto-compact 967K`), refreshed at start, on window change and on `status`. Zone-change toast checked live. 11 tests green. Also fixed doubled pane hotkey labels |
+| A-2.9 | When the pane is open but another tab (e.g. Files) is in front of it, the band comes back as the fallback and says "Steward pane is behind another tab", instead of staying silent. *(Re-scoped 2026-11-09: `ctrl+x ctrl+a` collapses the band itself, and the engine gives mods no signal for that, so the original wording is not buildable.)* | P-1 | 0.5 | A-1.6 | Switching tabs brings the band back within 5 s | ☑ 2026-11-09: 5 s `$.ui.panes()` poll (`isPlaced && isShown`); owner saw `… · Steward pane is behind another tab  9: Steward`. `/steward` now opens with `focus: true`, which raises the pane over another tab (owner checked). A collapsed band (engine: "plugin panel hidden") can't be detected |
+| A-2.6 | Task-boundary suggestion (git commit seen, or all tasks done) shown once in Amber or above | C-8 | 1.5 | A-2.2 | – | ☑ 2026-11-09: `tool.call` observer (after `next`, replay-safe catch). Commit path checked live by the owner (toast and pane line, `x` dismiss). Task-list path (TaskCreate/TaskUpdate/TodoWrite) unit-tested only, because those tools weren't loaded in the test session |
+| A-2.7 | "Cache cold, free handoff" hint (needs Phase 4 cache atom; stub until then) | C-9 | 0.5 | A-2.2, A-4.2 | – | ◐ 2026-11-09: `isFreeHandoff` in `core/band.ts` (tested). Band lead in amber/red and a pane CACHE line. `/steward demo free-handoff` previews it. Not checked live: the owner moved on. Real cold detection arrives with A-4.2; check it live then |
+| A-2.8 | "Claude seems off" calibration button and mark log in `$.store`. Re-tune defaults after the soak (A-7.6) | C-10 | 1 | A-1.6 | Marks visible in the pane | ☑ 2026-11-09: `o: seems off` in the pane and `/steward mark` log `{tokens, window, pct, zone, turn, at}` to `$.store` (cap 500, across sessions); pane shows count and last 3. Owner logged 3 marks. Turn counter resets on reload; increment not yet seen live |
+| A-2.3 | `/steward auto on|off|<tokens>` with per-user and per-project storage | C-5 | 1 | A-1.8 | – | ☑ 2026-11-09: `/steward auto [here] on|off|<tokens>`, `auto here reset`; project overrides user overrides default (off); no threshold = red zone. Pane `a` toggles the deciding scope. Pane COMMANDS section (7) lists every command, click fills the prompt. Owner checked |
+| A-2.4 | Auto-handoff arming: crossing the threshold on main-thread `turn.complete` starts a 10-second band countdown and a notification. Esc or `/steward cancel` aborts. Fires the (stub) handoff | C-6 | 2 | A-2.2, A-1.7 | Never fires mid-turn (test) | ☑ 2026-11-09: arms on main `turn.complete` (reason `answer`) past `autoAt`; 10 s band + pane countdown, notify with toast fallback. Cancel: band 1, pane c, `/steward cancel`, typing, new turn (Esc never reaches mods). Cancel or fire snoozes until the setting changes. `shouldArm` tested (9 cases). Owner tested live |
+| A-2.5 | Pane sections for Context and Usage | P-2 | 1 | A-1.6, A-2.1 | – | ☑ 2026-11-09: 5h and wk "resets in …" lines (`core/time.ts`, tested), redrawn by a 1-minute `tick` while the pane is up. Context section already showed tokens, zones and auto-compact (A-2.2) |
+
+## Phase 3: Handoff
+
+| ID | Activity | Reqs | Est | Depends | Done when | Status |
+|---|---|---|---|---|---|---|
+| A-3.1 | Brief template, plus `$.model.complete` over `$.session.messages()` with a configurable model | H-1, H-6 | 2 | A-1.1 | Under 2K tokens and useful on 3 real sessions | ◐ 2026-11-09: `core/brief.ts` (template, activity summary, transcript trim, 2K budget) and `hooks/handoff.ts`. Model writes Goal…Next step; Steward appends ground truth (ACTIVITIES, files changed in 24h, git status) and a fixed confirm-first closing (A-0.8). `briefModel` setting: session (fork) / sonnet / haiku. `/steward brief` writes a preview to `.claude/handoffs/preview-*.md` with no clear. 4 tests. Waiting: 3 real sessions |
+| A-3.2 | Confirm dialog: Proceed / Edit brief first (fills the prompt) / Cancel | H-2 | 1 | A-3.1 | – | ☑ 2026-11-09: `startHandoff` in `hooks/handoff.ts`. `/steward handoff`, band H and pane h return at once; band shows "writing handoff brief …", brief saved to `.claude/handoffs/<ts>.md`, then a `$.ui.ask` dialog (header Handoff, ~tokens, goal/decisions/open tasks). Edit fills the prompt; Cancel/dismiss keep the file; Proceed is a placeholder until A-3.3. Auto countdown skips the dialog (A-3.5 placeholder). ☑ owner checked live: "its working" (the dialog opens from a timer after the command returns) |
+| A-3.3 | Persist to `$.store` and `.claude/handoffs/<ts>.md`, then clear and re-seed (A-0.2 approach) | H-3, H-4 | 2 | A-3.2, A-0.2 | S-3 passes 5 out of 5 times | ◐ 2026-11-09: Proceed → `pendingBrief` in `$.store` (file already written) → `/clear` → `session.end{clear}` → refill (retries 10×, 2-min expiry) → "✓ handoff arrived" (band 20 s). Edit brief first = owner's option (a): brief in the prompt box; **Enter** on it is caught by `prompt.submit` (not sent to this session), saved over the file, and handed off. Pane h with an edited brief in the box asks Proceed/Cancel. (Typing `/steward handoff` would replace the box, hence Enter.) S-3 runs: 0/5 |
+| A-3.4 | `/steward fresh` with confirm | H-5 | 0.5 | A-3.3 | – | ◐ 2026-11-09: `startFresh` in `hooks/handoff.ts`. `/steward fresh`, band F and pane f → dialog (header Fresh: Start fresh / Cancel) → drops any pending or editing brief, then `/clear`. Dismiss or headless never clears. Live run batched with S-3 |
+| A-3.5 | Auto mode (no confirm) called from A-2.4. Band states "writing brief…" and "handoff arrived" | H-7, C-6 | 1 | A-3.3, A-2.4 | – | ◐ 2026-11-09: countdown end → `startHandoff(auto)` → band "writing handoff brief …" → brief saved → `/clear` → refill → "✓ handoff arrived" (20 s). Safety: typing or a new main turn while the brief is written (`abortAutoWrite`), or a non-empty prompt box, stops it before the clear; the brief file is kept. Live run batched with S-3 (`/steward auto 50K`, then finish a turn) |
+| A-3.6 | Wire H and F on band, pane and keys. Pane Handoffs section (recent briefs, open link) | C-3, P-2 | 1 | A-3.4 | – | ◐ 2026-11-09: H/F already wired (band 1/2 in amber/red, pane h/f, `/steward handoff\|fresh`), now real. Pane HANDOFFS (6): "N handoffs this week" (previews not counted) and the newest 5 files as `file://` Links with age. `briefs` atom refreshed at session start and after each save. Not checked live |
+| A-3.7 | Tests: template, persistence, recovery of a stale brief | – | 1.5 | A-3.5 | Green | ☑ 2026-11-09: template and budget in `tests/core.test.ts` (5). `tests/handoff.test.ts` (6) runs the real `session.end` hook with store, clock and prompt box mocked: refill once, retry while the box mounts, give up after 10 with the file path, stale (>2 min) brief not refilled, plain /clear no-op, other end reasons untouched. 29/29 green. Mutation check (expiry 10 min, 50 tries) fails exactly the two expected tests |
+
+## Phase 4: Cache
+
+| ID | Activity | Reqs | Est | Depends | Done when | Status |
+|---|---|---|---|---|---|---|
+| A-4.1 | On main-thread `turn.complete`, record `lastResponseAt` and `cache_read_input_tokens` | K-1, K-9 | 1 | A-1.2 | – | ◐ 2026-11-09: after `next`, main thread with `usage` → `noteResponse` (`lastAt`, read/written; guarded so a throw can't replay the turn end). Engine sums usage over the turn's requests, so hit = read ≥ written (`hitOf`). `/clear` resets it. Not checked live |
+| A-4.2 | Countdown atom (`$.clock.every`, 15 s ticks, 1 s in the last minute), `/steward ttl`, "est." label, no-response and cold states | K-1, K-2, K-8 | 2 | A-4.1 | Unit tests | ◐ 2026-11-09: `core/cache.ts` (pure, 3 tests) + `hooks/cache.ts`. Self-scheduling `$.clock.after` (15 s, landing on the 60 s mark, then 1 s; stops when cold). `/steward ttl [<min>]` saved in `$.store` for every session (default 60). Atom shape `cache-2` adds secondsLeft, lastAt, hit. Pane CACHE: countdown, last-turn hit/miss with read/written, window. Not checked live |
+| A-4.3 | Lead-time warning: `$.clock.after`, then `$.ui.notify`, falling back to a toast. Re-arm on each response | K-3 | 1 | A-4.2 | S-5 passes | ◐ 2026-11-09: `warnAt` (pure, tested) + `armWarning`/`warn` in `hooks/cache.ts`, re-armed on every restart (reply, `/steward ttl`, reload); a stale timer checks `lastAt` and stays quiet. `cacheLead` userConfig (default 5, 0 = off, capped at half the window). Reset on `/clear`. S-5 not run (owner will test later) |
+| A-4.4 | Cold-cost estimate from a userConfig pricing table | K-5 | 1 | A-2.1 | – | ◐ 2026-11-09: `core/cost.ts`: context tokens × input price × cache-write rate (1.25 for TTL ≤ 5 min, 2 above; prompt-caching docs). Default list prices from the Claude API reference cached 2026-10-06 (Opus 5.5 $4, Sonnet 5.5 $2, Haiku 5.5 $0.10/$0.50 >100K, Fable 5.1 $10 per MTok); `prices` userConfig overrides ("opus=4, sonnet=2"). Model from `$.session.model()` (new `model` atom). Shown in band cache-soon/cold leads and pane CACHE. 1 test. Not checked live |
+| A-4.5 | Keep-warm action (`/steward ping` sends a minimal prompt, user-initiated only) and Handoff & Clear wiring | K-6 | 1 | A-3.3 | – | ◐ 2026-11-09: `keepWarm` in `hooks/cache.ts` uses `$.model.fork` (no effort, so it reads the main cache as it stands): restarts the TTL at cache-read price, nothing joins the transcript. Refuses when no reply yet or already cold (a ping would pay full price). Toast reports K read / rewritten; countdown restarts via `noteResponse`. `/steward ping`, band and pane `k`. Handoff & Clear already wired (A-3.2/3.3). Phase-4 placeholder table removed from actions. Not checked live |
+| A-4.6 | Pane Cache section with cache-hit indicator | K-9, P-2 | 1 | A-4.2 | – | ◐ 2026-11-09: CACHE (2): countdown (seconds in the last minute) or "❄ cold (est.), since 3h ago", last turn hit ✓ / miss ✗ with read/written, next-msg cost if cold, window, free-handoff line; `k` keep warm, `t` window… (fills `/steward ttl `). Not checked live |
+| A-4.7 | Tests | – | 1 | A-4.6 | Green | ☑ 2026-11-09: pure (countdown, ticks, hit, ttl parse, warnAt, cost: 5 in `core.test.ts`) and `tests/cache.test.ts` (4) through the real hooks with clock/store/model mocked: S-5 in miniature (warn at 1 min of a 2-min window, once, re-armed by a reply), a reply cancels a pending warning, keep-warm refused before any reply and when cold and pings once otherwise, `/steward ttl` saves and rejects 0. 38/38 green. Mutation check fails exactly the 2 expected tests |
+
+## Phase 5: Blast
+
+| ID | Activity | Reqs | Est | Depends | Done when | Status |
+|---|---|---|---|---|---|---|
+| A-5.0 | Resolve **Q1**: review filetree `hooks/guard.ts` and `regex.ts` (MIT) for reuse, with credit | – | 1 | – | Decision logged | ☑ 2026-11-09: write fresh (reasons in PRD Q1). guard.ts = folder guard by substring, regex.ts = search regex engine; neither tokenizes or matches destructive commands |
+| A-5.1 | Shell tokenizer and destructive-pattern matcher, plus user patterns | B-1 | 3 | A-5.0 | 20+ positive and negative unit tests | ☑ 2026-11-09: `core/shell.ts` (pure). Tokenizer: quotes, escapes, comments, redirections; splits on `; && \|\| \| & ( ) $( )` and backticks. Unwraps env assignments, sudo/doas, env, command/exec/nohup/time, nice/timeout, xargs; recurses into `bash/sh -c` and `eval`. Kinds: rm (-r or glob), git push force/+ref/--delete, reset --hard/--merge/--keep, clean -f (not -n), checkout -- / . / -f, restore (not --staged only), branch -D, stash drop/clear, find -delete / -exec rm; user patterns (`;`-separated word prefixes, `*` one word, trailing `**`). `matchesPattern` whole-command mode ready for the allowlist. `tests/shell.test.ts`: 33 positive, 20 negative, plus tokenizer/targets/patterns (56 tests). Not wired to tool.call yet (A-5.3) |
+| A-5.2 | Impact preview: rm paths with count and size (`$.fs`), commits for reset or force-push, files for clean or restore (`$.process.run git`) | B-3 | 3 | A-5.1 | Real data in the dialog | ◐ 2026-11-09: `hooks/blast.ts` + `core/impact.ts` (pure, tested). rm: glob expand (last segment), walk capped at 5000, files/folders/size + names; reset: `log target..HEAD` + uncommitted files; force-push: `log HEAD..remote/branch` (as of last fetch), --delete named; clean: `git clean … -n`; checkout/restore: `diff --stat`; branch -D: unmerged commits; stash drop/clear; find: same find without -delete/-exec rm. `cd` earlier on the line honoured (shell.ts `Hit.cd`). Read-only throughout; failures say "could not preview". `/steward blast <cmd>` shows it without running. `blastPatterns` userConfig. Demo repo: scratchpad/blastdemo. Not checked live |
+| A-5.3 | Dialog: Proceed / Cancel / Allow this pattern for session. Deny reason for the model | B-4 | 1 | A-5.2, A-0.4 | S-4 passes | ◐ 2026-11-09: `tool.call{tool=Bash}` → `blastVerdict` (blast.ts). Ask "Blast radius": each hit's label + impact preview, Proceed / Cancel / Allow for session. Cancel and dismiss deny with a reason ("did not run… Do not retry… ask the user"); Other text is passed on as the instruction. Allow stores the exact command in the `allowed` atom (session only; whole-command match). Headless (no surface) fails open, logged to debug; a guard error fails open too. Each outcome is recorded in the `guards` atom (feeds A-5.5). `tests/blast.test.ts`: S-4 in miniature, 5 tests (101 total); allowlist mutation caught. Live S-4 not run yet |
+| A-5.4 | `/steward allow <pattern>` persistent allowlist | B-5 | 1 | A-5.3 | – | ☐ |
+| A-5.5 | Guard stats atom and pane Guards section | B-6, P-2 | 1 | A-5.3 | – | ☐ |
+| A-5.6 | Optional (P1): Write-overwrite and batch-overwrite detection | B-2 | 2 | A-5.3 | – | ☐ |
+
+## Phase 6: Collision
+
+| ID | Activity | Reqs | Est | Depends | Done when | Status |
+|---|---|---|---|---|---|---|
+| A-6.1 | Registry module: per-session file write, merged read, stale filter | G-1, G-5, D-7 | 2.5 | A-1.2 | Merge and expiry unit tests | ☐ |
+| A-6.2 | Record each edit after a successful Edit, Write or NotebookEdit (`await next(e)`) | G-1 | 1 | A-6.1 | – | ☐ |
+| A-6.3 | Pre-edit check and 4-option dialog | G-2, G-3 | 2 | A-6.2, A-0.4 | – | ☐ |
+| A-6.4 | Outcome handling (deny messages, worktree instruction) and headless fail-open | G-4, G-8 | 1.5 | A-6.3 | – | ☐ |
+| A-6.5 | Heartbeat with task summary and status from `prompt.submit`, `turn.start`, `turn.complete` and `session.end` | G-5 | 1.5 | A-6.1 | – | ☐ |
+| A-6.6 | ◆ band indicator and pane Sessions section | G-6, P-2 | 1.5 | A-6.5, A-1.5 | – | ☐ |
+| A-6.7 | Single-session no-op check and a 50 ms p95 check on `tool.call` | G-7, NFR | 1 | A-6.4 | – | ☐ |
+| A-6.8 | Tests, plus S-1 and S-2 | – | 1.5 | A-6.7 | Green | ☐ |
+
+## Phase 7: Hardening & release
+
+| ID | Activity | Reqs | Est | Depends | Done when | Status |
+|---|---|---|---|---|---|---|
+| A-7.1 | Full validate, tsc and test run. Fix the warnings | NFR | 1 | Phases 2–6 | Clean | ☐ |
+| A-7.2 | Feature-toggle test: each module off hides its band segment and pane section, and its hooks no-op | D-1 | 1 | A-7.1 | – | ☐ |
+| A-7.3 | Degradation on desktop and VS Code (status line or toast) | NFR | 1 | A-7.1 | – | ☐ |
+| A-7.4 | README covering what it does, keys, commands, config and privacy | – | 1.5 | A-7.1 | – | ☐ |
+| A-7.5 | Install at user scope. Mirror the source to `mymod/steward/` | D-9 | 0.5 | A-7.4 | – | ☐ |
+| A-7.6 | One-week soak with a log of false positives, misses and annoyances. Then review §7 metrics and decide on Design C | §7 | – | A-7.5 | Reviewed | ☐ |
+| A-7.7 | Optional: private GitHub marketplace repo after a secret and internal-URL scan | – | 1.5 | A-7.6 + owner OK | – | ☐ |
+
+---
+
+## Manual test scripts
+
+- **S-1 Collision:** Session A changes `pricing.html` from $29 to $39. Within 30 minutes, session B adds a "Most Popular" badge to the same file. Expected: B gets the dialog naming A's task and the time, and each option behaves as specified.
+- **S-2 Session awareness:** Open A, then B in the same repo, and send a prompt in B. Expected: A shows ◆ with B's task as "working", then "idle". Close B, and ◆ clears within 2 minutes.
+- **S-3 Handoff round trip:** On a 100K+ token session, press H, then Proceed. Expected: "writing brief…", the session clears, the brief is in the prompt, "handoff arrived", and the file is in `.claude/handoffs/`.
+- **S-4 Blast:** In a temp repo, `rm -rf build/` (3 files), then `git reset --hard HEAD~2`. Expected: the preview shows the files and commits, Cancel blocks, Proceed runs, and "Allow for session" stops the next prompt.
+- **S-5 Cache:** TTL 2 minutes, lead 1 minute. Send a message and wait. Expected: notification at about 1 minute, "cold" at 2 minutes, and a new message resets it.
+- **S-6 HUD calm and typing safety:** Type a prompt containing H, F and K. Expected: no action fires. With an empty prompt, H opens the handoff confirm. Resize the terminal to 60 and 35 columns, and segments drop in order, then it falls back to the status line.
+
+## Effort roll-up
+| Phase | Hours |
+|---|---|
+| 0 Spikes & setup | 9 |
+| 1 Shell | 14 |
+| 2 Usage + Context | 10 |
+| 3 Handoff | 9 |
+| 4 Cache | 8 |
+| 5 Blast | 10–12 |
+| 6 Collision | 12.5 |
+| 7 Hardening | 6.5 + soak |
+| **Total** | **≈ 82–84 h** (about 9–10 days) |

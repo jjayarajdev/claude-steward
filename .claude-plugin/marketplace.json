@@ -1,0 +1,14 @@
+{
+  "name": "claude-steward",
+  "description": "Steward: one cockpit for Claude Code sessions",
+  "owner": {
+    "name": "Jay Jayakeerthy"
+  },
+  "plugins": [
+    {
+      "name": "steward",
+      "source": "./steward",
+      "description": "One cockpit for Claude Code sessions: context health, cache, usage, handoff and destructive-command guards"
+    }
+  ]
+}
