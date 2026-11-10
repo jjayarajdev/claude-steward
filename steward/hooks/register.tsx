@@ -13,7 +13,7 @@ import type { Tone } from './core/band'
 import { syncSavedAllow, setModel, bumpTick, countTurn, loadAuto, readLive, restoreCollapsed, restoreMarks, setDemo, setLive, setPaneUp, swapZone } from './state'
 import { abortAutoWrite, catchEditedBrief, previewBrief, refreshBriefs, scheduleReseed, useBriefModel } from './handoff'
 import { allowCommand, blastPreview, blastVerdict } from './blast'
-import { noteEdit } from './registry'
+import { endHeartbeat, heartbeat, noteEdit, startHeartbeat } from './registry'
 import { collisionVerdict } from './collision'
 import { normPath } from './core/registry'
 import { noteResponse, resetCache, startCache, ttlCommand, useCacheLead } from './cache'
@@ -139,6 +139,11 @@ async function stewardCommand($: EngineInterface, args: string, cfg: Config): Pr
   }
 }
 
+/** A-6.5: a heartbeat that can never break the hook it rides on. */
+async function safeBeat($: EngineInterface, patch: Parameters<typeof heartbeat>[1]): Promise<void> {
+  try { await heartbeat($, patch) } catch (err) { $.ui.log(`steward: heartbeat failed: ${String(err)}`, { to: 'debug' }) }
+}
+
 export const register: Register = (on, options) => {
   const cfg = parseConfig(options)
   useBriefModel(cfg.briefModel)
@@ -158,6 +163,7 @@ export const register: Register = (on, options) => {
     await refreshBriefs($)
     await startCache($)
     try { await syncSavedAllow($) } catch { /* the pane shows 0 saved; the guard reads the store itself */ }
+    if (cfg.features.collision) try { await startHeartbeat($) } catch (err) { $.ui.log(`steward: heartbeat start failed: ${String(err)}`, { to: 'debug' }) }
     if (cfg.openPaneAtStart) void openPane($, false)
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -177,6 +183,7 @@ export const register: Register = (on, options) => {
       // A-2.4: between turns only. Fresh figures first (the plain usage call is free).
       await setLive($, liveFrom(await $.session.usage()))
       if (cfg.features.context) await maybeArm($, cfg.zones, true, !e.isAborted && e.reason === 'answer')
+      if (cfg.features.collision) await safeBeat($, { status: 'idle' })
     }
     const r = await next(e)
     // A-4.1: the turn's requests read or wrote the main cache, so its countdown restarts.
@@ -242,6 +249,7 @@ export const register: Register = (on, options) => {
     if (!e.agentId) {
       await cancelCountdown($, 'cancelled: a new turn started')
       await abortAutoWrite($, 'a new turn started')
+      if (cfg.features.collision) await safeBeat($, { status: 'working' })
     }
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -257,7 +265,11 @@ export const register: Register = (on, options) => {
   // A-3.3: Enter on an edited brief hands off with it instead of sending it here.
   on('prompt.submit', async ($, e, next) => {
     const drop = await catchEditedBrief($, e.text, !e.origin)
-    return drop ? { drop } : next(e)
+    if (drop) return { drop }
+    // A-6.5: what this session is doing, for other sessions' dialogs (typed prompts only,
+    // and not slash commands).
+    if (cfg.features.collision && !e.origin && !e.text.trimStart().startsWith('/')) await safeBeat($, { status: 'working', task: e.text })
+    return next(e)
   }).catch(($, e, next) => next(e))
 
   // A-3.3: a /clear ends this session; refill the fresh one's prompt box from a timer.
@@ -266,6 +278,8 @@ export const register: Register = (on, options) => {
       await resetCache($)
       scheduleReseed($)
     }
+    // A-6.5: other sessions stop asking about this one at once.
+    if (cfg.features.collision) try { await endHeartbeat($) } catch (err) { $.ui.log(`steward: heartbeat end failed: ${String(err)}`, { to: 'debug' }) }
     return next(e)
   }).catch(($, e, next) => next(e))
 

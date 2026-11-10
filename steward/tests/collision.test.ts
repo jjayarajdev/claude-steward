@@ -140,3 +140,48 @@ test('headless: fails open without asking (G-8)', async ($, on) => {
   expect(w.asked.length).toBe(0)
   expect(w.edited.length).toBe(1)
 })
+
+// ── A-6.5: the heartbeat ──
+test('heartbeat: every 30 s from session start; prompt sets the task; turns set the status; end says ended', async ($, on) => {
+  const w = world(on)
+  const store = new Map<string, unknown>()
+  on('store.get', (_, e) => ({ value: store.get(e.key) }))
+  on('store.set', (_, e) => { store.set(e.key, e.value); return { value: undefined } })
+  on('session.usage', () => ({ value: { context: { tokens: 1000, window: 200_000, percent: 1 }, rateLimits: [], cost: { usd: 0 } } as never }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('command.register', () => ({ value: { command: 'steward' } as never }))
+  on('ui.open', () => ({ value: { isPlaced: true } as never }))
+  on('ui.panes', () => ({ value: [] as never }))
+  on('session.start', (_, e) => ({ cwd: e.cwd } as never))
+  on('prompt.submit', (_, e) => ({ text: e.text } as never))
+  on('turn.start', () => ({} as never))
+  on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+
+  await $.session.start({ cwd: '/w/app', surface: 'terminal', isInteractive: true } as never)
+  const first = w.mine()!.heartbeatAt
+  expect(w.mine()!.status).toBe('idle')
+  await w.clock.advance(30_000)
+  expect(w.mine()!.heartbeatAt).toBe(first + 30_000)
+
+  await $.prompt.submit({ text: '  fix the\n pricing page header  ' } as never)
+  expect(w.mine()!.task).toBe('fix the pricing page header')
+  expect(w.mine()!.status).toBe('working')
+  await $.prompt.submit({ text: '/steward status' } as never) // a slash command is not a task
+  expect(w.mine()!.task).toBe('fix the pricing page header')
+
+  await $.session.end({ reason: 'other', sessionId: 'self', resume: false } as never)
+  expect(w.mine()!.status).toBe('ended')
+  const endedAt = w.mine()!.heartbeatAt
+  await w.clock.advance(90_000) // stopped: no more beats
+  expect(w.mine()!.heartbeatAt).toBe(endedAt)
+})
+
+test('heartbeat keeps an idle session live for the other session\'s check (S-1 shape)', async ($, on) => {
+  const w = world(on, ['Cancel'])
+  w.other('b', '/w/app/p.html', 1)
+  await w.clock.advance(5 * 60_000)
+  w.other('b', '/w/app/p.html', 6) // b only beat (its edit is 6 min old): still live, still a hit
+  const r = await $.tool.call(edit('/w/app/p.html')) as { deny?: string }
+  expect(w.asked[0]!.startsWith('app/p.html was edited 6 min ago')).toBe(true)
+  expect(r.deny === undefined).toBe(false)
+})

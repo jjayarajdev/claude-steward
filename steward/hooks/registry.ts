@@ -2,7 +2,7 @@
 // This session writes only its own file; it reads everyone's and merges them.
 // A file not touched within STALE_MS (by mtime) is skipped without being read,
 // so the cost of a check grows with live sessions, not with every session ever.
-import type { EngineInterface } from 'claude-code'
+import type { EngineInterface, Timer } from 'claude-code'
 
 import { STALE_MS, beat, liveOthers, newEntry, parseEntry, recordEdit, serialize } from './core/registry'
 import type { Entry, SessionStatus } from './core/registry'
@@ -67,4 +67,22 @@ export async function readOthers($: EngineInterface): Promise<Entry[]> {
     try { entries.push(parseEntry(await $.fs.read(`${d}/${n.name}`))) } catch { /* half-written or gone: skip */ }
   }
   return liveOthers(entries, id, now)
+}
+
+// ── A-6.5 (PRD G-5): the heartbeat ──
+export const HEARTBEAT_MS = 30_000
+let hb: Timer | null = null
+
+/** session.start (and each reload): beat now, then every 30 s. A reload replaces the old timer. */
+export async function startHeartbeat($: EngineInterface): Promise<void> {
+  hb?.cancel()
+  await heartbeat($)
+  hb = $.clock.every(HEARTBEAT_MS, () => { void heartbeat($).catch(() => undefined) })
+}
+
+/** session.end: say so at once (others stop asking about this session), and stop beating. */
+export async function endHeartbeat($: EngineInterface): Promise<void> {
+  hb?.cancel()
+  hb = null
+  await heartbeat($, { status: 'ended' })
 }
