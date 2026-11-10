@@ -101,8 +101,8 @@ Status: ☐ todo · ◐ in progress · ☑ done · ✕ dropped. Estimates are in
 
 | ID | Activity | Reqs | Est | Depends | Done when | Status |
 |---|---|---|---|---|---|---|
-| A-7.1 | Full validate, tsc and test run. Fix the warnings | NFR | 1 | Phases 2–6 | Clean | ☐ |
-| A-7.2 | Feature-toggle test: each module off hides its band segment and pane section, and its hooks no-op | D-1 | 1 | A-7.1 | – | ☐ |
+| A-7.1 | Full validate, tsc and test run. Fix the warnings | NFR | 1 | Phases 2–6 | Clean | ☑ 2026-11-10: `claude plugin validate` fully clean (was: README missing in the mod folder, no icon). Added `steward/README.md` (A-7.4 rewrites it) and `.claude-plugin/icon.png` (1024 px, gauge arc + ◆). tsc clean; tests print no stray output. Dropped the stale "(Phase 6)" label in GUARDS |
+| A-7.2 | Feature-toggle test: each module off hides its band segment and pane section, and its hooks no-op | D-1 | 1 | A-7.1 | – | ☑ 2026-11-10: `tests/toggles.test.ts` runs Steward with real `userConfig` options (test `options`): all on (control: 7 sections, both guards ask, heartbeat file written); blast off (rm runs unasked); collision off (edit unasked, no registry file, no SESSIONS); both off (no GUARDS); cache off (no warning, no CACHE; control with cache on warns); context+usage off (their sections gone). Band: features off leave no segment (core test with control). 8 tests (131 total) |
 | A-7.3 | Degradation on desktop and VS Code (status line or toast) | NFR | 1 | A-7.1 | – | ☐ |
 | A-7.4 | README covering what it does, keys, commands, config and privacy | – | 1.5 | A-7.1 | – | ☐ |
 | A-7.5 | Install at user scope. Mirror the source to `mymod/steward/` | D-9 | 0.5 | A-7.4 | – | ☐ |

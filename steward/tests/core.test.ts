@@ -315,3 +315,14 @@ test('perf: nearest-rank percentiles and the 50 ms budget line', async () => {
   for (let i = 0; i < 600; i++) s = record(s, 'x', i)
   expect((s as { x: number[] }).x.length).toBe(500)
 })
+
+// A-7.2 (D-1): a feature switched off reaches the band as null / 0 and leaves no trace there.
+test('band: cache, usage and collision off leave no segment or state', async () => {
+  const off: BandInput = { ...base, cache: null, usage: null, others: { count: 0, task: null } }
+  const v = resolveBand(off)
+  const segs = (v?.segments ?? []).map(x => x.id)
+  expect(segs.includes('cache') || segs.includes('five') || segs.includes('week') || segs.includes('cost') || segs.includes('other')).toBe(false)
+  // Control: the same band with the features on does carry them.
+  const onSegs = (resolveBand({ ...base, cache: { minutesLeft: 40, isCold: false }, others: { count: 1, task: 'x' } })?.segments ?? []).map(x => x.id)
+  expect(onSegs.includes('five') && onSegs.includes('cache')).toBe(true)
+})

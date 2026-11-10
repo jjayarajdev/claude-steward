@@ -409,7 +409,7 @@ export const register: Register = (on, options) => {
           const MARK = { blocked: ['✕', 'error'], proceeded: ['✓', 'success'], allowed: ['↷', undefined] } as const
           return (
             <Box flexDirection="column">
-              <Text>blast {f.blast ? '✓' : '–'}  collision {f.collision ? '✓' : '–'}{f.collision && <Text dimColor> (Phase 6)</Text>}</Text>
+              <Text>blast {f.blast ? '✓' : '–'}  collision {f.collision ? '✓' : '–'}</Text>
               {s.guards.length === 0
                 ? <Text dimColor>nothing guarded yet this session</Text>
                 : <Text dimColor>{n('blocked')} blocked · {n('proceeded')} proceeded · {n('allowed')} allowed</Text>}
