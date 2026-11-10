@@ -13,7 +13,7 @@ import { zoneOf, shortTokens } from './core/zones'
 import type { ZoneConfig, ZoneResult } from './core/zones'
 
 export type Features = { context: boolean; cache: boolean; usage: boolean; collision: boolean; blast: boolean }
-export type Config = { features: Features; openPaneAtStart: boolean; quiet: boolean; zones: ZoneConfig; briefModel: BriefModel; cacheLeadMinutes: number; prices: Price[]; blastPatterns: string[] }
+export type Config = { features: Features; openPaneAtStart: boolean; quiet: boolean; zones: ZoneConfig; briefModel: BriefModel; cacheLeadMinutes: number; prices: Price[]; blastPatterns: string[]; collisionWindowMinutes: number }
 
 export type Snapshot = {
   live: Live
@@ -126,5 +126,6 @@ export function parseConfig(options: Readonly<Record<string, unknown>>): Config 
     blastPatterns: parsePatterns(options['blastPatterns']),
     prices: parsePrices(typeof options['prices'] === 'string' ? options['prices'] : undefined),
     cacheLeadMinutes: options['cacheLead'] === '0' ? 0 : num('cacheLead', 5),
+    collisionWindowMinutes: num('collisionWindow', 30),
   }
 }

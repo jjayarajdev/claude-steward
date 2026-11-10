@@ -132,3 +132,11 @@ test('A-5.5: every outcome is recorded for the Guards section; the saved list is
   await ui.unmount()
   expect(w.ran).toEqual(['rm -rf build', 'rm -rf dist', 'ls'])
 })
+
+test('a path held in a variable is said to be unknown, and still asks', async ($, on) => {
+  const w = world(on, ['Cancel'])
+  await bash($, 'S=$(mktemp -d); rm -rf $S')
+  expect(w.asked.length).toBe(1)
+  expect(w.asked[0]!.includes('deletes a path held in a variable ($S)')).toBe(true)
+  expect(w.asked[0]!.includes('not found')).toBe(false)
+})

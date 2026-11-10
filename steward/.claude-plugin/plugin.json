@@ -107,6 +107,12 @@
       "description": "How long before the estimated cache expiry Steward sends a notification. 0 turns the warning off. Capped at half the cache window. Default 5.",
       "default": "5"
     },
+    "collisionWindow": {
+      "type": "string",
+      "title": "Collision window (minutes)",
+      "description": "Another session's edit to the same file within this many minutes counts as a collision. Default 30.",
+      "default": "30"
+    },
     "prices": {
       "type": "string",
       "title": "Input prices ($ per million tokens)",

@@ -13,6 +13,8 @@ import type { Tone } from './core/band'
 import { syncSavedAllow, setModel, bumpTick, countTurn, loadAuto, readLive, restoreCollapsed, restoreMarks, setDemo, setLive, setPaneUp, swapZone } from './state'
 import { abortAutoWrite, catchEditedBrief, previewBrief, refreshBriefs, scheduleReseed, useBriefModel } from './handoff'
 import { allowCommand, blastPreview, blastVerdict } from './blast'
+import { noteEdit } from './registry'
+import { normPath } from './core/registry'
 import { noteResponse, resetCache, startCache, ttlCommand, useCacheLead } from './cache'
 import { leftText } from './core/cache'
 import { usdText } from './core/cost'
@@ -185,14 +187,24 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 
   // A-2.6: watch finished tools for a task boundary (observe only; never blocks).
+  // A-6.2 (PRD G-1): after a successful Edit, Write or NotebookEdit, record the file in
+  // this session's registry entry (subagents' edits count as this session's).
   on('tool.call', async ($, e, next) => {
     const r = await next(e)
     if (cfg.features.context && !e.agentId) {
       const { tool, ...input } = e as unknown as { tool: string } & Record<string, unknown>
-      await noteTool($, cfg.zones, { tool, input, result: r.result, isOk: !r.deny && !r.isError })
+      try { await noteTool($, cfg.zones, { tool, input, result: r.result, isOk: !r.deny && !r.isError }) }
+      catch (err) { $.ui.log(`steward: boundary note failed: ${String(err)}`, { to: 'debug' }) }
+    }
+    if (cfg.features.collision && r.deny === undefined && !r.isError) {
+      const path = e.tool === 'Edit' || e.tool === 'Write' ? e.file_path : e.tool === 'NotebookEdit' ? e.notebook_path : undefined
+      if (path) {
+        try { await noteEdit($, normPath(await $.session.cwd(), path), cfg.collisionWindowMinutes * 60_000) }
+        catch (err) { $.ui.log(`steward: registry write failed: ${String(err)}`, { to: 'debug' }) }
+      }
     }
     return r
-  }).catch(($, e, next) => next(e)) // replay-safe: never re-runs the tool
+  }).catch(($, e, next) => next(e)) // after next every step is guarded, so this runs only if next threw
 
   // A-5.3 (PRD B-4): destructive Bash commands wait for Proceed / Cancel / Allow for session.
   // Any failure in the guard itself lets the command through (D-6), logged to debug.

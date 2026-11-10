@@ -63,7 +63,9 @@ async function rmImpact($: EngineInterface, h: Hit, cwd: string): Promise<Impact
   const t: Tally = { files: 0, dirs: 0, bytes: 0, capped: false }
   const items: { name: string; count?: number }[] = []
   const missing: string[] = []
-  for (const word of h.targets) {
+  // `$S`, `${DIR}/x`, `~user`: the shell fills these in when it runs; not knowable here.
+  const vars = h.targets.filter(w => /\$|^~[^/]/.test(w))
+  for (const word of h.targets.filter(w => !vars.includes(w))) {
     const paths = await expand($, resolvePath(cwd, hm, word))
     if (!paths.length) { missing.push(word); continue }
     for (const p of paths) {
@@ -78,8 +80,13 @@ async function rmImpact($: EngineInterface, h: Hit, cwd: string): Promise<Impact
       } else { t.files++; t.bytes += st.size; items.push({ name: shown }) }
     }
   }
-  if (!items.length) return { summary: `nothing there to delete (${missing.join(', ')} not found)`, lines: [] }
+  const varNote = vars.length ? `${vars.join(', ')}: set by the shell when it runs, so not known in advance` : null
+  if (!items.length) {
+    if (vars.length) return { summary: `deletes a path held in a variable (${vars.join(', ')}); what it names is not known in advance`, lines: missing.length ? [`not found: ${missing.join(', ')}`] : [] }
+    return { summary: `nothing there to delete (${missing.join(', ')} not found)`, lines: [] }
+  }
   const lines = [nameList(items)]
+  if (varNote) lines.push(`also ${varNote}`)
   if (missing.length) lines.push(`not found: ${missing.join(', ')}`)
   if (h.cd) lines.push(`in ${h.cd}/ (from the cd before it)`)
   return { summary: `deletes ${t.capped ? `${WALK_CAP}+ entries` : plural(t.files, 'file')}${t.dirs ? ` in ${plural(t.dirs, 'folder')}` : ''}, ${fmtBytes(t.bytes)}${t.capped ? '+' : ''}`, lines }
