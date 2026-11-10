@@ -167,10 +167,12 @@ test('heartbeat: every 30 s from session start; prompt sets the task; turns set 
   await w.clock.advance(30_000)
   expect(w.mine()!.heartbeatAt).toBe(first + 30_000)
 
-  await $.prompt.submit({ text: '  fix the\n pricing page header  ' } as never)
+  await $.prompt.submit({ text: 'from a notification', origin: { kind: 'task-notification' } } as never) // not the person's task
+  expect(w.mine()!.task).toBe('')
+  await $.prompt.submit({ text: '  fix the\n pricing page header  ', origin: { kind: 'composer' } } as never)
   expect(w.mine()!.task).toBe('fix the pricing page header')
   expect(w.mine()!.status).toBe('working')
-  await $.prompt.submit({ text: '/steward status' } as never) // a slash command is not a task
+  await $.prompt.submit({ text: '/steward status', origin: { kind: 'composer' } } as never) // a slash command is not a task
   expect(w.mine()!.task).toBe('fix the pricing page header')
 
   await $.session.end({ reason: 'other', sessionId: 'self', resume: false } as never)

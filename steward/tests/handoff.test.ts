@@ -8,11 +8,12 @@ const BRIEF = '# Handoff brief · test\n\n## Goal\nShip A-3.7\n'
 const REL = '.claude/handoffs/test.md'
 
 /** Mocks the world: returns the clock and the fills the prompt box saw. */
-function world(on: On, opts: { pendingAgeMs?: number; refuse?: number; noPending?: boolean } = {}) {
+function world(on: On, opts: { pendingAgeMs?: number; refuse?: number; noPending?: boolean; editing?: string } = {}) {
   const clock = mock.clock(on)
   const now = clock.now()
   // The store as a Map the test can read back (the test's $ has no store noun).
   const store = new Map<string, unknown>()
+  if (opts.editing) store.set('editingBrief', { at: now, rel: opts.editing })
   if (!opts.noPending) store.set('pendingBrief', { brief: BRIEF, at: now - (opts.pendingAgeMs ?? 0), rel: REL })
   on('store.get', (_, e) => ({ value: store.get(e.key) }))
   on('store.set', (_, e) => { store.set(e.key, e.value); return { value: undefined } })
@@ -84,4 +85,25 @@ test('a session that ends for another reason is never re-seeded', async ($, on) 
   await w.clock.advance(3000)
   expect(w.fills).toEqual([])
   expect(w.pending()).toEqual(expect.objectContaining({ rel: REL }))
+})
+
+// A-3.3: Enter on an edited brief hands off with it, but only for the person's own Enter.
+test('Enter on an edited brief (composer) hands off; the same text from elsewhere is sent as usual', async ($, on) => {
+  const w = world(on, { noPending: true, editing: '.claude/handoffs/e.md' })
+  const written: string[] = []
+  on('session.root', () => ({ value: '/w' }))
+  on('fs.write', (_, e) => { written.push(e.path); return { value: undefined } })
+  on('fs.list', () => ({ value: [] as never }))
+  on('fs.exists', () => ({ value: false }))
+  on('command.run', () => ({ text: '' } as never))
+  on('prompt.submit', (_, e) => ({ text: e.text } as never))
+
+  const other = await $.prompt.submit({ text: BRIEF, origin: { kind: 'sdk' } } as never) as { drop?: string }
+  expect(other.drop).toBe(undefined)
+  expect(written.length).toBe(0)
+
+  const mine = await $.prompt.submit({ text: BRIEF, origin: { kind: 'composer' } } as never) as { drop?: string }
+  expect(String(mine.drop).includes('Handing off with your edited brief')).toBe(true)
+  expect(written).toEqual(['/w/.claude/handoffs/e.md'])
+  expect(w.pending()).not.toBe(undefined)
 })

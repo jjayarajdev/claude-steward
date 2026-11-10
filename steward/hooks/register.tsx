@@ -267,11 +267,15 @@ export const register: Register = (on, options) => {
 
   // A-3.3: Enter on an edited brief hands off with it instead of sending it here.
   on('prompt.submit', async ($, e, next) => {
-    const drop = await catchEditedBrief($, e.text, !e.origin)
+    // The engine stamps every prompt's origin; the person's own Enter is `composer`
+    // (`bridge` is the person too, from Remote Control). Notifications, peers,
+    // plugins and the like are not the person's task.
+    const kind = e.origin?.kind
+    const byPerson = (kind === 'composer' || kind === 'bridge') && !e.isMeta
+    const drop = await catchEditedBrief($, e.text, kind === 'composer')
     if (drop) return { drop }
-    // A-6.5: what this session is doing, for other sessions' dialogs (typed prompts only,
-    // and not slash commands).
-    if (cfg.features.collision && !e.origin && !e.text.trimStart().startsWith('/')) await safeBeat($, { status: 'working', task: e.text })
+    // A-6.5: what this session is doing, for other sessions' dialogs (not slash commands).
+    if (cfg.features.collision && byPerson && !e.text.trimStart().startsWith('/')) await safeBeat($, { status: 'working', task: e.text })
     return next(e)
   }).catch(($, e, next) => next(e))
 
