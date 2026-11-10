@@ -300,3 +300,18 @@ test('cold-cache cost: price by model, write rate by TTL, overrides win (A-4.4)'
   expect(usdText(2.4)).toBe('$2.40')
   expect(resolveBand({ ...base, cache: { minutesLeft: null, isCold: true, coldUsd: 2.4 } })?.lead).toBe('cache cold (est.) · next msg ≈ $2.40')
 })
+
+// ── A-6.7 guard timings ──
+import { percentile, perfLine, record } from '../hooks/core/perf'
+test('perf: nearest-rank percentiles and the 50 ms budget line', async () => {
+  const xs = Array.from({ length: 100 }, (_, i) => i + 1) // 1..100
+  expect(percentile(xs, 95)).toBe(95)
+  expect(percentile(xs, 50)).toBe(50)
+  expect(percentile([], 95)).toBe(null)
+  expect(perfLine('blast check', [3, 4, 5])).toBe('blast check: 3 calls · p50 4 ms · p95 5 ms · max 5 ms ✓')
+  expect(perfLine('collision check', [...Array(19).fill(10), 80]).endsWith('✓')).toBe(true) // one slow call in 20 is the p95 edge
+  expect(perfLine('collision check', [...Array(18).fill(10), 80, 80]).includes('✗ over the 50 ms budget')).toBe(true)
+  let s = {}
+  for (let i = 0; i < 600; i++) s = record(s, 'x', i)
+  expect((s as { x: number[] }).x.length).toBe(500)
+})

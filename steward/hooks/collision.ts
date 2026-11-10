@@ -7,6 +7,7 @@ import { touchedBy } from './core/registry'
 import type { Touch } from './core/registry'
 import { readOthers } from './registry'
 import { noteGuard } from './state'
+import { notePerf, perfNow } from './perf'
 
 export const PROCEED = 'Proceed'
 export const WORKTREE = 'Move to worktree'
@@ -47,14 +48,14 @@ export function denyText(answer: string, shown: string, hits: readonly Touch[], 
 
 /** Nothing is written before the person chooses. Headless: fail open, logged (G-8). */
 export async function collisionVerdict($: EngineInterface, file: string, windowMs: number): Promise<Verdict> {
+  const t0 = perfNow()
   const others = await readOthers($)
-  if (!others.length) return { go: true } // G-7: alone, no effect
   const now = await $.clock.now()
-  const hits = touchedBy(others, file, now, windowMs)
-  if (!hits.length) return { go: true }
-  const newest = hits[0]!.at
+  const hits = others.length ? touchedBy(others, file, now, windowMs) : [] // G-7: alone, nothing to find
+  const newest = hits[0]?.at
   const seen = acked.get(file)
-  if (seen !== undefined && seen >= newest) return { go: true }
+  await notePerf($, 'collision check', t0)
+  if (newest === undefined || (seen !== undefined && seen >= newest)) return { go: true }
 
   const root = await $.session.root()
   const shown = file.startsWith(`${root}/`) ? file.slice(root.length + 1) : file

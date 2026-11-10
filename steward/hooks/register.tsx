@@ -15,6 +15,7 @@ import { abortAutoWrite, catchEditedBrief, previewBrief, refreshBriefs, schedule
 import { allowCommand, blastPreview, blastVerdict } from './blast'
 import { endHeartbeat, heartbeat, noteEdit, startHeartbeat } from './registry'
 import { collisionVerdict } from './collision'
+import { perfReport } from './perf'
 import { normPath } from './core/registry'
 import { noteResponse, resetCache, startCache, ttlCommand, useCacheLead } from './cache'
 import { leftText } from './core/cache'
@@ -64,6 +65,7 @@ const HELP = [
   '/steward ttl [<min>]  show or set the cache window estimate (default 60)',
   '/steward blast <cmd>  preview what a destructive command would touch; runs nothing',
   '/steward allow [remove] <cmd>  save (or remove) a command Blast radius never asks about; no args lists them',
+  '/steward perf         how long the collision and blast checks take before a tool runs (p50 / p95)',
   '/steward mark         log "Claude seems off" at the current context size',
   '/steward auto [here] on|off|<tokens>   auto-handoff (here = this project; /steward auto here reset)',
   '/steward handoff      write a brief, then confirm: Proceed / Edit brief first / Cancel',
@@ -123,6 +125,7 @@ async function stewardCommand($: EngineInterface, args: string, cfg: Config): Pr
     case 'ttl': return await ttlCommand($, arg)
     case 'blast': return await blastPreview($, rest, cfg.blastPatterns)
     case 'allow': return await allowCommand($, rest)
+    case 'perf': return perfReport()
     case 'mark': return await markOff($, cfg.zones)
     case 'demo': {
       const want = DEMOS.find(d => d === arg) ?? 'off'

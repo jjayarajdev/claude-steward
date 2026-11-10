@@ -8,6 +8,7 @@ import type { EngineInterface } from 'claude-code'
 import { commitLines, findDryRun, fmtBytes, globToRegExp, hasGlob, nameList, plural, resolvePath } from './core/impact'
 import type { Impact } from './core/impact'
 import { findDestructive, matchesPattern } from './core/shell'
+import { notePerf, perfNow } from './perf'
 import { allowForSession, loadSavedAllow, noteGuard, readAllowed, saveSavedAllow } from './state'
 import type { Hit } from './core/shell'
 
@@ -209,9 +210,11 @@ const short = (s: string, n = 80) => (s.length > n ? `${s.slice(0, n - 1)}…` :
  * fail open, logged to debug. A dismissed dialog counts as Cancel.
  */
 export async function blastVerdict($: EngineInterface, command: string, userPatterns: readonly string[]): Promise<Verdict> {
-  const allowed = [...(await readAllowed($)), ...(await loadSavedAllow($))]
+  const t0 = perfNow()
   const all = findDestructive(command, userPatterns)
+  const allowed = all.length ? [...(await readAllowed($)), ...(await loadSavedAllow($))] : []
   const hits = all.filter(h => !allowed.some(p => matchesPattern(h.argv, p, false)))
+  await notePerf($, 'blast check', t0)
   if (!hits.length) {
     if (all.length) await noteGuard($, { kind: 'blast', target: short(all.map(h => h.label).join('; '), 60), outcome: 'allowed', at: Date.now() })
     return { go: true }
