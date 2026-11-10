@@ -108,5 +108,16 @@ export function touchedBy(others: readonly Entry[], file: string, now: number, w
   return out.sort((a, b) => b.at - a.at)
 }
 
+/** G-6: the pane's view of one other session: its task, status and newest files (relative to root). */
+export function otherView(e: Entry, root: string, max = 3): { id: string; task: string; status: 'working' | 'idle'; files: string[] } {
+  const rel = (f: string) => (f.startsWith(`${root}/`) ? f.slice(root.length + 1) : f)
+  return {
+    id: e.sessionId,
+    task: e.task || '(no prompt yet)',
+    status: e.status === 'working' ? 'working' : 'idle',
+    files: [...e.edits].reverse().slice(0, max).map(x => rel(x.file)),
+  }
+}
+
 /** G-6: other live sessions in the same project root. */
 export const sameRoot = (others: readonly Entry[], root: string): Entry[] => others.filter(o => o.root === root)

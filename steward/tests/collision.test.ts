@@ -142,8 +142,7 @@ test('headless: fails open without asking (G-8)', async ($, on) => {
 })
 
 // ── A-6.5: the heartbeat ──
-test('heartbeat: every 30 s from session start; prompt sets the task; turns set the status; end says ended', async ($, on) => {
-  const w = world(on)
+function startMocks(on: On) {
   const store = new Map<string, unknown>()
   on('store.get', (_, e) => ({ value: store.get(e.key) }))
   on('store.set', (_, e) => { store.set(e.key, e.value); return { value: undefined } })
@@ -156,7 +155,12 @@ test('heartbeat: every 30 s from session start; prompt sets the task; turns set 
   on('prompt.submit', (_, e) => ({ text: e.text } as never))
   on('turn.start', () => ({} as never))
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+}
 
+
+test('heartbeat: every 30 s from session start; prompt sets the task; turns set the status; end says ended', async ($, on) => {
+  const w = world(on)
+  startMocks(on)
   await $.session.start({ cwd: '/w/app', surface: 'terminal', isInteractive: true } as never)
   const first = w.mine()!.heartbeatAt
   expect(w.mine()!.status).toBe('idle')
@@ -184,4 +188,29 @@ test('heartbeat keeps an idle session live for the other session\'s check (S-1 s
   const r = await $.tool.call(edit('/w/app/p.html')) as { deny?: string }
   expect(w.asked[0]!.startsWith('app/p.html was edited 6 min ago')).toBe(true)
   expect(r.deny === undefined).toBe(false)
+})
+
+// ── A-6.6: other sessions in this project, in the pane and the band ──
+const PANE = { plugin: 'steward', component: 'Pane', requestId: 'steward', surface: 'terminal',
+  props: { title: 'Steward', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 120 }, view: {} } } as never
+
+test('A-6.6: a live session in the same root shows as ◆ with its task and files; it leaves when stale', async ($, on) => {
+  const w = world(on)
+  startMocks(on)
+  w.other('b', '/w/app/pricing.html', 2, 'add Most Popular badge')
+  // A session in another project is not "here".
+  const away = beat(newEntry('z', '/elsewhere', '/elsewhere', w.clock.now()), w.clock.now(), { status: 'working', task: 'unrelated' })
+  w.files.set(`${DIR}/z.json`, serialize(away))
+  await $.session.start({ cwd: '/w/app', surface: 'terminal', isInteractive: true } as never)
+
+  const ui = await $.ui.mount(PANE)
+  expect((await ui.find({ type: 'Text', text: /◆/ }))?.text).toBe('◆ "add Most Popular badge" · working')
+  expect((await ui.find({ type: 'Text', text: /pricing\.html/ }))?.text?.trim()).toBe('app/pricing.html')
+  expect(await ui.find({ type: 'Text', text: /unrelated/ })).toBe(undefined)
+  await ui.unmount()
+
+  await w.clock.advance(3 * 60_000) // b stops beating: gone at the next refresh
+  const ui2 = await $.ui.mount(PANE)
+  expect((await ui2.find({ type: 'Text', text: /only this session/ }))?.text).toBe('only this session')
+  await ui2.unmount()
 })

@@ -4,7 +4,8 @@
 // so the cost of a check grows with live sessions, not with every session ever.
 import type { EngineInterface, Timer } from 'claude-code'
 
-import { STALE_MS, beat, liveOthers, newEntry, parseEntry, recordEdit, serialize } from './core/registry'
+import { STALE_MS, beat, liveOthers, newEntry, otherView, parseEntry, recordEdit, sameRoot, serialize } from './core/registry'
+import { setOthers } from './state'
 import type { Entry, SessionStatus } from './core/registry'
 
 let dir: string | null | undefined
@@ -77,7 +78,14 @@ let hb: Timer | null = null
 export async function startHeartbeat($: EngineInterface): Promise<void> {
   hb?.cancel()
   await heartbeat($)
-  hb = $.clock.every(HEARTBEAT_MS, () => { void heartbeat($).catch(() => undefined) })
+  await refreshOthers($)
+  hb = $.clock.every(HEARTBEAT_MS, () => { void heartbeat($).then(() => refreshOthers($)).catch(() => undefined) })
+}
+
+/** A-6.6 (G-6): other live sessions in this project, for the ◆ band segment and the pane. */
+export async function refreshOthers($: EngineInterface): Promise<void> {
+  const root = await $.session.root()
+  await setOthers($, sameRoot(await readOthers($), root).map(e => otherView(e, root)))
 }
 
 /** session.end: say so at once (others stop asking about this session), and stop beating. */
@@ -85,4 +93,5 @@ export async function endHeartbeat($: EngineInterface): Promise<void> {
   hb?.cancel()
   hb = null
   await heartbeat($, { status: 'ended' })
+  await setOthers($, [])
 }

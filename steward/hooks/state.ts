@@ -293,6 +293,13 @@ export async function noteGuard($: EngineInterface, g: GuardEvent): Promise<void
   await update($, guards, l => [...l, g].slice(-50))
 }
 
+// ── A-6.6 other sessions in this project ──
+/** Writes only when something changed, so a quiet 30 s refresh redraws nothing. */
+export async function setOthers($: EngineInterface, list: OtherSession[]): Promise<void> {
+  const cur = await read($, others)
+  if (JSON.stringify(cur) !== JSON.stringify(list)) await update($, others, () => list)
+}
+
 // ── A-5.4 persistent blast allowlist ($.store, every session and project) ──
 export async function loadSavedAllow($: EngineInterface): Promise<string[]> {
   const v = await $.store.get('blastAllow')
