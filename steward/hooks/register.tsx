@@ -14,6 +14,7 @@ import { syncSavedAllow, setModel, bumpTick, countTurn, loadAuto, readLive, rest
 import { abortAutoWrite, catchEditedBrief, previewBrief, refreshBriefs, scheduleReseed, useBriefModel } from './handoff'
 import { allowCommand, blastPreview, blastVerdict } from './blast'
 import { noteEdit } from './registry'
+import { collisionVerdict } from './collision'
 import { normPath } from './core/registry'
 import { noteResponse, resetCache, startCache, ttlCommand, useCacheLead } from './cache'
 import { leftText } from './core/cache'
@@ -216,6 +217,25 @@ export const register: Register = (on, options) => {
     $.ui.log('steward: blast guard failed; command allowed', { to: 'debug' })
     return next(e)
   })
+
+  // A-6.3 (PRD G-2, G-3): before an edit, ask when another live session edited the same
+  // file within the window. A failure in the guard lets the edit through (D-6).
+  const collisionWindowMs = cfg.collisionWindowMinutes * 60_000
+  on('tool.call', { tool: 'Edit' }, async ($, e, next) => {
+    if (!cfg.features.collision) return next(e)
+    const v = await collisionVerdict($, normPath(await $.session.cwd(), e.file_path), collisionWindowMs)
+    return v.go ? next(e) : { deny: v.reason }
+  }).catch(($, e, next) => next(e))
+  on('tool.call', { tool: 'Write' }, async ($, e, next) => {
+    if (!cfg.features.collision) return next(e)
+    const v = await collisionVerdict($, normPath(await $.session.cwd(), e.file_path), collisionWindowMs)
+    return v.go ? next(e) : { deny: v.reason }
+  }).catch(($, e, next) => next(e))
+  on('tool.call', { tool: 'NotebookEdit' }, async ($, e, next) => {
+    if (!cfg.features.collision) return next(e)
+    const v = await collisionVerdict($, normPath(await $.session.cwd(), e.notebook_path), collisionWindowMs)
+    return v.go ? next(e) : { deny: v.reason }
+  }).catch(($, e, next) => next(e))
 
   // A-2.4: a new main turn or typing in the prompt cancels a running countdown.
   on('turn.start', async ($, e, next) => {
