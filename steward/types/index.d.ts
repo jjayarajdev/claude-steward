@@ -33,7 +33,7 @@ export type HandoffView =
 
 export type OtherSession = { id: string; task: string; status: 'working' | 'idle'; files: string[] }
 
-export type GuardEvent = { kind: 'collision' | 'blast'; target: string; outcome: 'proceeded' | 'blocked'; at: number }
+export type GuardEvent = { kind: 'collision' | 'blast'; target: string; outcome: 'proceeded' | 'blocked' | 'allowed'; at: number }
 
 export type Demo = 'off' | 'amber' | 'red' | 'cache-warn' | 'cache-cold' | 'free-handoff' | 'countdown' | 'other'
 
@@ -78,6 +78,7 @@ declare module 'claude-code' {
       briefs: Shaped<Briefs>
       model: string | null
       allowed: Shaped<string[]>
+      savedAllow: Shaped<string[]>
     }
   }
 }

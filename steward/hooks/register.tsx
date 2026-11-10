@@ -10,15 +10,15 @@ import { autoCompactFrom, bar, shortTokens, zoneOf, zoneToast } from './core/zon
 import { FREE_HANDOFF_TEXT, fitBand, isFreeHandoff, resolveBand } from './core/band'
 import { resetIn } from './core/time'
 import type { Tone } from './core/band'
-import { setModel, bumpTick, countTurn, loadAuto, readLive, restoreCollapsed, restoreMarks, setDemo, setLive, setPaneUp, swapZone } from './state'
+import { syncSavedAllow, setModel, bumpTick, countTurn, loadAuto, readLive, restoreCollapsed, restoreMarks, setDemo, setLive, setPaneUp, swapZone } from './state'
 import { abortAutoWrite, catchEditedBrief, previewBrief, refreshBriefs, scheduleReseed, useBriefModel } from './handoff'
-import { blastPreview, blastVerdict } from './blast'
+import { allowCommand, blastPreview, blastVerdict } from './blast'
 import { noteResponse, resetCache, startCache, ttlCommand, useCacheLead } from './cache'
 import { leftText } from './core/cache'
 import { usdText } from './core/cost'
 import { liveFrom, parseConfig, snapshot } from './view'
 import type { Config } from './view'
-import type { Demo } from '../types'
+import type { Demo, GuardEvent } from '../types'
 
 const DEMOS: readonly Demo[] = ['off', 'amber', 'red', 'cache-warn', 'cache-cold', 'free-handoff', 'countdown', 'other']
 const SECTIONS: readonly { id: SectionId; title: string; hotkey: string }[] = [
@@ -46,6 +46,8 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ['/steward brief', 'preview a handoff brief (nothing is cleared)'],
   ['/steward ttl ', 'cache window estimate in minutes, e.g. 5 or 60'],
   ['/steward blast ', 'preview what a destructive command would touch (runs nothing)'],
+  ['/steward allow', 'commands that run without the Blast radius question'],
+  ['/steward allow ', 'save one, e.g. rm -rf node_modules  (remove <cmd> to undo)'],
   ['/steward help', 'all commands'],
 ]
 const TONE_COLOR: Record<Tone, string | undefined> = { calm: undefined, info: 'suggestion', warn: 'warning', alert: 'error' }
@@ -58,6 +60,7 @@ const HELP = [
   '/steward brief        write a handoff brief preview to .claude/handoffs/ (no clear)',
   '/steward ttl [<min>]  show or set the cache window estimate (default 60)',
   '/steward blast <cmd>  preview what a destructive command would touch; runs nothing',
+  '/steward allow [remove] <cmd>  save (or remove) a command Blast radius never asks about; no args lists them',
   '/steward mark         log "Claude seems off" at the current context size',
   '/steward auto [here] on|off|<tokens>   auto-handoff (here = this project; /steward auto here reset)',
   '/steward handoff      write a brief, then confirm: Proceed / Edit brief first / Cancel',
@@ -116,6 +119,7 @@ async function stewardCommand($: EngineInterface, args: string, cfg: Config): Pr
     case 'brief': return await previewBrief($, cfg.briefModel)
     case 'ttl': return await ttlCommand($, arg)
     case 'blast': return await blastPreview($, rest, cfg.blastPatterns)
+    case 'allow': return await allowCommand($, rest)
     case 'mark': return await markOff($, cfg.zones)
     case 'demo': {
       const want = DEMOS.find(d => d === arg) ?? 'off'
@@ -150,6 +154,7 @@ export const register: Register = (on, options) => {
     startTicker($)
     await refreshBriefs($)
     await startCache($)
+    try { await syncSavedAllow($) } catch { /* the pane shows 0 saved; the guard reads the store itself */ }
     if (cfg.openPaneAtStart) void openPane($, false)
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -347,13 +352,21 @@ export const register: Register = (on, options) => {
         ))}
 
         {(f.collision || f.blast) && section('guards', () => {
-          const blocked = s.guards.filter(g => g.outcome === 'blocked').length
-          const last = s.guards.at(-1)
+          const n = (o: GuardEvent['outcome']) => s.guards.filter(g => g.outcome === o).length
+          const MARK = { blocked: ['✕', 'error'], proceeded: ['✓', 'success'], allowed: ['↷', undefined] } as const
           return (
             <Box flexDirection="column">
-              <Text>collision {f.collision ? '✓' : '–'}  blast {f.blast ? '✓' : '–'}  <Text dimColor>(Phases 5–6)</Text></Text>
-              <Text dimColor>{blocked} blocked · {s.guards.length - blocked} proceeded</Text>
-              {last && <Text dimColor>last: {last.target} {last.outcome} · {ago(last.at)}</Text>}
+              <Text>blast {f.blast ? '✓' : '–'}  collision {f.collision ? '✓' : '–'}{f.collision && <Text dimColor> (Phase 6)</Text>}</Text>
+              {s.guards.length === 0
+                ? <Text dimColor>nothing guarded yet this session</Text>
+                : <Text dimColor>{n('blocked')} blocked · {n('proceeded')} proceeded · {n('allowed')} allowed</Text>}
+              {s.guards.slice(-3).reverse().map((g, i) => (
+                <Text key={`g-${i}`}><Text color={MARK[g.outcome][1]}>{MARK[g.outcome][0]}</Text> <Text dimColor>{g.target.length > w + 12 ? `${g.target.slice(0, w + 11)}…` : g.target} · {ago(g.at)}</Text></Text>
+              ))}
+              <Box>
+                <Text dimColor>allow list: {s.allowSaved.length} saved{s.allowSession.length ? ` · ${s.allowSession.length} this session` : ''}  </Text>
+                <Button key="g-allow" hotkey="l" plain onPress={() => fillCommand($, '/steward allow')}>list</Button>
+              </Box>
             </Box>
           )
         })}

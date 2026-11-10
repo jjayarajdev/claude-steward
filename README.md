@@ -32,6 +32,7 @@ In the desktop app: click + next to the prompt box, then Plugins, Add marketplac
 - `/steward brief` previews a handoff brief; `/steward handoff` hands off.
 - `/steward ttl 5` sets the cache window estimate (minutes).
 - `/steward blast <command>` previews what a destructive command would touch, without running it.
+- `/steward allow rm -rf node_modules` lets that exact command run without asking, in every session; `/steward allow` lists them, `/steward allow remove <command>` takes one back.
 
 Each feature can be turned off in the plugin's settings.
 

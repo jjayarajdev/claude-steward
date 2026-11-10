@@ -25,6 +25,8 @@ export type Snapshot = {
   handoff: HandoffView
   others: OtherSession[]
   guards: GuardEvent[]
+  allowSaved: string[]
+  allowSession: string[]
   demo: Demo
   paneUp: boolean
   paneBehind: boolean
@@ -69,6 +71,8 @@ export async function snapshot($: EngineInterface, cfg: Config): Promise<Snapsho
     handoff: h,
     others: o,
     guards: st.guards,
+    allowSaved: st.savedAllow,
+    allowSession: st.allowed,
     demo: d,
     paneUp: st.paneUp,
     paneBehind: st.paneBehind,

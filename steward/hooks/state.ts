@@ -48,6 +48,8 @@ const boundaryShown = atom({ plugin: 'steward', key: 'boundaryShown' } as const,
 const briefs = atom({ plugin: 'steward', key: 'briefs' } as const, { list: [], week: 0 } as Briefs, { shape: 'briefs-1' })
 /** Blast patterns allowed for this session only (A-5.3 "Allow for session"). */
 const allowed = atom({ plugin: 'steward', key: 'allowed' } as const, [] as string[], { shape: 'allowed-1' })
+/** Mirror of the saved allowlist in $.store, so the pane draws it without I/O (A-5.5). */
+const savedAllow = atom({ plugin: 'steward', key: 'savedAllow' } as const, [] as string[], { shape: 'savedAllow-1' })
 const collapsed = atom({ plugin: 'steward', key: 'collapsed' } as const, [] as SectionId[], { shape: 'collapsed-1' })
 
 export type State = {
@@ -67,6 +69,8 @@ export type State = {
   marks: OffMark[]
   boundary: Boundary | null
   briefs: Briefs
+  allowed: string[]
+  savedAllow: string[]
 }
 
 export async function readAll($: EngineInterface): Promise<State> {
@@ -87,6 +91,8 @@ export async function readAll($: EngineInterface): Promise<State> {
     boundary: await read($, boundary),
     marks: await read($, marks),
     briefs: await read($, briefs),
+    allowed: await read($, allowed),
+    savedAllow: await read($, savedAllow),
   }
 }
 
@@ -285,4 +291,19 @@ export async function allowForSession($: EngineInterface, pattern: string): Prom
 /** One guard outcome for the pane's Guards section; the last 50 are kept. */
 export async function noteGuard($: EngineInterface, g: GuardEvent): Promise<void> {
   await update($, guards, l => [...l, g].slice(-50))
+}
+
+// ── A-5.4 persistent blast allowlist ($.store, every session and project) ──
+export async function loadSavedAllow($: EngineInterface): Promise<string[]> {
+  const v = await $.store.get('blastAllow')
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+}
+export async function saveSavedAllow($: EngineInterface, list: string[]): Promise<void> {
+  await $.store.set('blastAllow', list)
+  await update($, savedAllow, () => list)
+}
+/** session.start: copy the saved list into the pane's atom (another session may have changed it). */
+export async function syncSavedAllow($: EngineInterface): Promise<void> {
+  const list = await loadSavedAllow($)
+  await update($, savedAllow, () => list)
 }

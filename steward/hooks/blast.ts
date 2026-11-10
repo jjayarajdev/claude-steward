@@ -8,7 +8,7 @@ import type { EngineInterface } from 'claude-code'
 import { commitLines, findDryRun, fmtBytes, globToRegExp, hasGlob, nameList, plural, resolvePath } from './core/impact'
 import type { Impact } from './core/impact'
 import { findDestructive, matchesPattern } from './core/shell'
-import { allowForSession, noteGuard, readAllowed } from './state'
+import { allowForSession, loadSavedAllow, noteGuard, readAllowed, saveSavedAllow } from './state'
 import type { Hit } from './core/shell'
 
 const WALK_CAP = 5000
@@ -202,9 +202,13 @@ const short = (s: string, n = 80) => (s.length > n ? `${s.slice(0, n - 1)}…` :
  * fail open, logged to debug. A dismissed dialog counts as Cancel.
  */
 export async function blastVerdict($: EngineInterface, command: string, userPatterns: readonly string[]): Promise<Verdict> {
-  const allowed = await readAllowed($)
-  const hits = findDestructive(command, userPatterns).filter(h => !allowed.some(p => matchesPattern(h.argv, p, false)))
-  if (!hits.length) return { go: true }
+  const allowed = [...(await readAllowed($)), ...(await loadSavedAllow($))]
+  const all = findDestructive(command, userPatterns)
+  const hits = all.filter(h => !allowed.some(p => matchesPattern(h.argv, p, false)))
+  if (!hits.length) {
+    if (all.length) await noteGuard($, { kind: 'blast', target: short(all.map(h => h.label).join('; '), 60), outcome: 'allowed', at: Date.now() })
+    return { go: true }
+  }
   const target = short(hits.map(h => h.label).join('; '), 60)
   if (!(await $.session.surfaces()).length) {
     $.ui.log(`steward: blast guard could not ask (headless); allowed: ${target}`, { to: 'debug' })
@@ -238,4 +242,43 @@ export async function blastVerdict($: EngineInterface, command: string, userPatt
   }
   // Text typed under "Other": hand it to the model as the user's instruction.
   return { go: false, reason: `Steward Blast Radius: the user stopped \`${short(command, 200)}\` (${impact}) before it ran, with this instruction: "${answer}"` }
+}
+
+// ── A-5.4 (PRD B-5): `/steward allow` — a saved allowlist, whole-command patterns ──
+const normPattern = (p: string) => p.trim().split(/\s+/).filter(Boolean).join(' ')
+
+/** A pattern that would wave through any command at all is refused. */
+function tooBroad(p: string): string | null {
+  const w = p.split(' ')
+  if (w[0] === '*' || w[0] === '**') return 'its first word must be a command name, not * or **'
+  if (w.length === 2 && w[1] === '**') return `it would allow every ${w[0]} command; name the flags too, e.g. "${w[0]} -rf node_modules"`
+  return null
+}
+
+export async function allowCommand($: EngineInterface, rest: string): Promise<string> {
+  const arg = rest.trim()
+  const saved = await loadSavedAllow($)
+  if (!arg || arg === 'list') {
+    const session = await readAllowed($)
+    const lines = [
+      saved.length ? `Saved (every session):\n${saved.map(p => `  ${p}`).join('\n')}` : 'Saved (every session): none',
+      session.length ? `This session only:\n${session.map(p => `  ${p}`).join('\n')}` : '',
+      'Add: /steward allow <command>   Remove: /steward allow remove <command>   (* = any one word, ** at the end = anything after)',
+    ]
+    return lines.filter(Boolean).join('\n')
+  }
+  const rm = /^remove\s+(.+)$/.exec(arg)
+  if (rm) {
+    const p = normPattern(rm[1]!)
+    if (!saved.includes(p)) return `Not in the saved list: ${p}`
+    await saveSavedAllow($, saved.filter(x => x !== p))
+    return `Removed: ${p}. Blast radius asks for it again.`
+  }
+  const p = normPattern(arg)
+  const why = tooBroad(p)
+  if (why) return `Not saved: ${why}.`
+  if (saved.includes(p)) return `Already saved: ${p}`
+  await saveSavedAllow($, [...saved, p])
+  const guarded = findDestructive(p.replace(/\*\*?/g, 'x'), []).length > 0
+  return `Saved: ${p}. It runs without asking, in every session.${guarded ? '' : ' (Blast radius would not have asked for it anyway.)'}`
 }
