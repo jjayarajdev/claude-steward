@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { bandWidth, fitBand, isFreeHandoff, resolveBand } from '../hooks/core/band'
+import { bandWidth, fitBand, isFreeHandoff, resolveBand, statusLine } from '../hooks/core/band'
 import type { BandInput } from '../hooks/core/band'
 import { asSetting, autoAt, parseAuto, resolveAuto, shouldArm } from '../hooks/core/auto'
 import { allDone, isGitCommit, shouldSuggest } from '../hooks/core/boundary'
@@ -325,4 +325,12 @@ test('band: cache, usage and collision off leave no segment or state', async () 
   // Control: the same band with the features on does carry them.
   const onSegs = (resolveBand({ ...base, cache: { minutesLeft: 40, isCold: false }, others: { count: 1, task: 'x' } })?.segments ?? []).map(x => x.id)
   expect(onSegs.includes('five') && onSegs.includes('cache')).toBe(true)
+})
+
+test('statusLine: icon, lead and short segments, no actions, capped', async () => {
+  const v = resolveBand({ ...base, zone: 'amber', pct: 62 })!
+  const line = statusLine(v)
+  expect(line.startsWith(`${v.icon} ${v.lead}`)).toBe(true)
+  for (const a of v.actions) expect(line.includes(`[${a.label}]`)).toBe(false)
+  expect(statusLine({ ...v, lead: 'x'.repeat(300) }).length).toBe(100)
 })

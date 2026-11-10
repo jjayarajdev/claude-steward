@@ -8,7 +8,7 @@ import { beat, newEntry, recordEdit, serialize } from '../hooks/core/registry'
 const DIR = '/home/me/.claude/steward/registry'
 const ALL_ON = { context: 'on', cache: 'on', usage: 'on', collision: 'on', blast: 'on' }
 
-function world(on: On) {
+function world(on: On, surfaces: string[] = ['terminal']) {
   const clock = mock.clock(on)
   const files = new Map<string, string>()
   const store = new Map<string, unknown>([['ttlMinutes', 2]])
@@ -22,7 +22,9 @@ function world(on: On) {
   on('session.id', () => ({ value: 'self' }))
   on('session.root', () => ({ value: '/w' }))
   on('session.cwd', () => ({ value: '/w' }))
-  on('session.surfaces', () => ({ value: ['terminal'] as never }))
+  on('session.surfaces', () => ({ value: surfaces as never }))
+  const statuses: (string | undefined)[] = []
+  on('ui.status', (_, e) => { statuses.push((e as { text?: string }).text); return { value: undefined } })
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
   on('session.usage', () => ({ value: { context: { tokens: 50_000, window: 200_000, percent: 25 }, rateLimits: [], cost: { usd: 1 } } as never }))
   on('session.start', (_, e) => ({ cwd: e.cwd } as never))
@@ -50,7 +52,7 @@ function world(on: On) {
   // Another live session that edited /w/p.html a minute ago.
   const now = clock.now()
   files.set(`${DIR}/b.json`, serialize(beat(recordEdit(newEntry('b', '/w', '/w', now), '/w/p.html', now - 60_000, 30 * 60_000), now, { status: 'working', task: 'pricing' })))
-  return { clock, files, asked, ran, notes }
+  return { clock, files, asked, ran, notes, statuses }
 }
 
 const PANE = { plugin: 'steward', component: 'Pane', requestId: 'steward', surface: 'terminal',
@@ -127,4 +129,22 @@ test('context and usage off: their sections hide', { options: { ...ALL_ON, conte
   world(on)
   await $.session.start(start)
   expect(await sections($)).toEqual(['cache', 'sessions', 'guards', 'handoffs', 'commands'])
+})
+
+// ── A-7.3: VS Code and mobile draw no band; the status line carries it ──
+test('VS Code, pane not shown: the band goes to the status line, and only on change', { options: ALL_ON }, async ($, on) => {
+  const w = world(on, ['vscode'])
+  await $.session.start(start)
+  await w.clock.advance(5_000)
+  expect(w.statuses.length).toBe(1)
+  expect(String(w.statuses[0]).includes('ctx 25%')).toBe(true)
+  await w.clock.advance(10_000) // nothing changed: no rewrite
+  expect(w.statuses.length).toBe(1)
+})
+
+test('terminal: the band is drawn there, so the status line stays empty', { options: ALL_ON }, async ($, on) => {
+  const w = world(on, ['terminal'])
+  await $.session.start(start)
+  await w.clock.advance(15_000)
+  expect(w.statuses.filter(x => x !== undefined).length).toBe(0)
 })

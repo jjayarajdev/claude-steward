@@ -132,6 +132,16 @@ export function bandWidth(v: Pick<BandView, 'lead' | 'actions' | 'segments'>): n
  * Fits the band into `columns`: segments shrink (short form) or drop by dropRank,
  * lowest first. Under 40 columns, compact: lead + first action only.
  */
+/**
+ * A-7.3: the band as one status-line text, for surfaces that draw no band
+ * (VS Code, mobile). No buttons there, so actions are left out; short segments.
+ */
+export function statusLine(v: BandView, max = 100): string {
+  const segs = v.segments.map(s => s.short ?? s.text)
+  const text = [`${v.icon} ${v.lead}`, ...segs].join(' · ')
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+}
+
 export function fitBand(v: BandView, columns: number): BandView {
   if (columns < 40) {
     return { ...v, segments: [], actions: v.actions.slice(0, 1), lead: v.lead.split(' · ')[0] ?? v.lead }

@@ -10,6 +10,7 @@ import type { BriefModel } from './core/brief'
 import type { Briefs, AutoState, Boundary, CacheView, Demo, GuardEvent, HandoffView, Live, OffMark, OtherSession, SectionId } from '../types'
 import { readAll } from './state'
 import { zoneOf, shortTokens } from './core/zones'
+import type { BandInput } from './core/band'
 import type { ZoneConfig, ZoneResult } from './core/zones'
 
 export type Features = { context: boolean; cache: boolean; usage: boolean; collision: boolean; blast: boolean }
@@ -93,6 +94,23 @@ type UsageLike = {
 }
 
 /** Pure: maps `session.measure` or `$.session.usage()` onto Steward's live figures. */
+/** What the band (and its status-line fallback) is drawn from; features off reach it as null / 0. */
+export function bandInputOf(s: Snapshot, cfg: Config): BandInput {
+  const f = cfg.features
+  return {
+    zone: f.context ? s.zone.zone : 'green',
+    pct: s.pct,
+    tokensText: s.tokensText,
+    cache: f.cache ? { minutesLeft: s.cache.minutesLeft, isCold: s.cache.isCold, coldUsd: s.coldUsd } : null,
+    handoff: s.handoff.phase,
+    countdownSeconds: s.handoff.phase === 'countdown' ? s.handoff.secondsLeft : 0,
+    others: { count: f.collision ? s.others.length : 0, task: s.others[0]?.task ?? null },
+    usage: f.usage ? { fiveHour: s.live.fiveHour, week: s.live.week, usd: s.live.usd } : null,
+    paneUp: s.paneUp,
+    quiet: cfg.quiet,
+  }
+}
+
 export function liveFrom(u: UsageLike): Partial<Live> {
   const five = u.rateLimits.find(r => r.kind === 'five_hour')
   const week = u.rateLimits.find(r => r.kind === 'seven_day')

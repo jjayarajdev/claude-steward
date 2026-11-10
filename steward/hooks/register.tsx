@@ -20,7 +20,8 @@ import { normPath } from './core/registry'
 import { noteResponse, resetCache, startCache, ttlCommand, useCacheLead } from './cache'
 import { leftText } from './core/cache'
 import { usdText } from './core/cost'
-import { liveFrom, parseConfig, snapshot } from './view'
+import { bandInputOf, liveFrom, parseConfig, snapshot } from './view'
+import { syncStatus } from './fallback'
 import type { Config } from './view'
 import type { Demo, GuardEvent } from '../types'
 
@@ -99,11 +100,11 @@ async function checkZone($: EngineInterface, cfg: Config): Promise<void> {
 // another tab (e.g. Files) comes in front of the pane.
 let timers: Timer[] = []
 
-function startTicker($: EngineInterface): void {
+function startTicker($: EngineInterface, cfg: Config): void {
   for (const t of timers) t.cancel()
   timers = [
     $.clock.every(60_000, () => { void bumpTick($) }),
-    $.clock.every(5_000, () => { void syncPane($) }),
+    $.clock.every(5_000, () => { void syncPane($).then(() => syncStatus($, cfg)).catch(() => undefined) }),
   ]
 }
 
@@ -162,7 +163,7 @@ export const register: Register = (on, options) => {
     // load or hot reload shows real numbers at once (the plain call is free).
     await refresh($)
     await checkZone($, cfg)
-    startTicker($)
+    startTicker($, cfg)
     await refreshBriefs($)
     await startCache($)
     try { await syncSavedAllow($) } catch { /* the pane shows 0 saved; the guard reads the store itself */ }
@@ -459,19 +460,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const s = await snapshot($, cfg)
-    const f = cfg.features
-    const view = resolveBand({
-      zone: f.context ? s.zone.zone : 'green',
-      pct: s.pct,
-      tokensText: s.tokensText,
-      cache: f.cache ? { minutesLeft: s.cache.minutesLeft, isCold: s.cache.isCold, coldUsd: s.coldUsd } : null,
-      handoff: s.handoff.phase,
-      countdownSeconds: s.handoff.phase === 'countdown' ? s.handoff.secondsLeft : 0,
-      others: { count: f.collision ? s.others.length : 0, task: s.others[0]?.task ?? null },
-      usage: f.usage ? { fiveHour: s.live.fiveHour, week: s.live.week, usd: s.live.usd } : null,
-      paneUp: s.paneUp,
-      quiet: cfg.quiet,
-    })
+    const view = resolveBand(bandInputOf(s, cfg))
     if (!view) return next(e)
     const v = fitBand(view, e.props.bodyColumns)
     const { Box, Button, Text } = $.ui.resolve(e)
